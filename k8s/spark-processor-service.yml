@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-processor-metrics
+spec:
+  selector:
+    app: spark-processor
+  ports:
+  - name: metrics
+    port: 4040
+    targetPort: metrics

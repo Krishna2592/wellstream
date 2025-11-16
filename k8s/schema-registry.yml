@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: schema-registry
+spec:
+  selector:
+    app: schema-registry
+  ports:
+    - port: 8081
+      targetPort: 8081
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: schema-registry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: schema-registry
+  template:
+    metadata:
+      labels:
+        app: schema-registry
+    spec:
+      initContainers:
+      - name: wait-for-kafka
+        image: busybox
+        command: ['sh', '-c', 'until nc -z kafka-broker.default.svc.cluster.local 9092; do echo waiting for kafka; sleep 2; done;']
+      containers:
+      - name: schema-registry
+        image: confluentinc/cp-schema-registry:7.4.0
+        command: ["/bin/sh", "-c", "unset PORT && /etc/confluent/docker/run"]
+        ports:
+        - containerPort: 8081
+        resources: # updated resource requests/limits to reduce OOM risk
+          requests:
+            memory: "1Gi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+        env:
+        - name: SCHEMA_REGISTRY_HOST_NAME
+          value: "schema-registry.default.svc.cluster.local"
+        - name: SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS
+          value: "PLAINTEXT://kafka-broker.default.svc.cluster.local:9092"
+        - name: SCHEMA_REGISTRY_LISTENERS
+          value: "http://0.0.0.0:8081"
+        - name: SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL
+          value: "DEBUG"
+        - name: SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR
+          value: "1"
+        - name: SCHEMA_REGISTRY_KAFKASTORE_INIT_TIMEOUT_MS
+          value: "300000"
+        - name: JAVA_TOOL_OPTIONS
+          value: "-Xms512m -Xmx1024m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp"
+        - name: SCHEMA_REGISTRY_DEBUG
+          value: "true"
+        #- expose logs and runtime flags to increase debug info
+        readinessProbe:
+          httpGet:
+            path: /subjects
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 6
+        startupProbe:
+          httpGet:
+            path: /subjects
+            port: 8081
+          failureThreshold: 30
+          periodSeconds: 10
+          initialDelaySeconds: 20
+        livenessProbe:
+          httpGet:
+            path: /subjects
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 2
+          failureThreshold: 3
+      # readiness and liveness probes will be defined per-container
