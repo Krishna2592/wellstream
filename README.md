@@ -241,7 +241,7 @@ MIT
 │        │                                                   │             │
 │    ┌───▼────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐   │            │
 │    │ Step 3 │  │ Step 4│  │ Step 5│  │ Step 6│  │ Step 7│   │            │
-│    │ Init   │→ │ Read  │→ │ Cast  │→ │ JSON  │→ │ SQL   │   │            │
+│    │ Init   │→ │ Read  │→ │ Cast  │→ │ Avro  │→ │ SQL   │   │            │
 │    │ Spark  │  │Kafka │  │Binary │  │Parse │  │  KPIs │   │            │
 │    └────────┘  └──────┘  └──────┘  └──────┘  └──────┘   │            │
 │        │                                                   │             │
@@ -300,10 +300,18 @@ STEP 5: Cast Binary → String
 
          ↓
 
-STEP 6: Parse JSON + Create Temp Views
+STEP 6 (Before): Parse JSON + Create Temp Views
     │
     ├─ from_json(col("json_value"), wellSchema)
     ├─ from_json(col("json_value"), tankSchema)
+    │
+    ├─ wellParsed.createOrReplaceTempView("well_data_temp")
+    └─ tankParsed.createOrReplaceTempView("tank_data_temp")
+    
+STEP 6(NOW): Parse Avro with Schema Registry + Create Temp Views
+    │
+    ├─ Use spark-avro and set "schema.registry.url" to connect to Schema Registry
+    ├─ from_avro(col("value"), schema, options)  # Deserializes using registered Avro schemas
     │
     ├─ wellParsed.createOrReplaceTempView("well_data_temp")
     └─ tankParsed.createOrReplaceTempView("tank_data_temp")
