@@ -179,6 +179,29 @@ kubectl describe pod <pod-name>
 kubectl get svc
 ```
 
+### Schema Registry fails to start on Kubernetes (Confluent image)
+**Symptom:**
+Schema Registry pod repeatedly fails with the log message:
+
+```
+PORT is deprecated. Please use SCHEMA_REGISTRY_LISTENERS instead.
+```
+and exits immediately, causing CrashLoopBackOff.
+
+**Root Cause:**
+Kubernetes automatically injects a `SCHEMA_REGISTRY_PORT` environment variable into your pod if your Service is named `schema-registry`. The Confluent Docker image treats this as a deprecated config and exits with an error.
+
+**Solution:**
+Rename your Service and Deployment to something that does **not** start with `schema-registry`. For example, use `schema-reg` or `sr` as the service name. Update all references in your manifests and client configs (e.g., use `http://schema-reg:8081` for the Schema Registry URL).
+
+**Why this works:**
+Kubernetes will inject `SCHEMA_REG_PORT` (not `SCHEMA_REGISTRY_PORT`), so the Confluent image will not see the deprecated variable and will start normally.
+
+**References:**
+- [Stack Overflow: Integrating Spark Structured Streaming with the Confluent Schema Registry](https://stackoverflow.com/questions/48882723/integrating-spark-structured-streaming-with-the-confluent-schema-registry/49182004#49182004)
+
+**This is a common pain point for Confluent images on Kubernetes.**
+
 ## Future Enhancements
 
 - **Delta Lake** - Replace console sink with ACID-compliant storage

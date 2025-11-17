@@ -2,3 +2,16 @@
 .vscode
 Java
 .env
+# Maven build output
+target/
+
+# IDE files
+.idea/
+*.iml
+
+# Log files
+*.log
+
+# Temp files from debugging
+pod1.yaml
+pod2.yaml

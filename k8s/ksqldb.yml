@@ -34,4 +34,4 @@ spec:
         - name: KSQL_LISTENERS
           value: "http://0.0.0.0:8088"
         - name: KSQL_KSQL_SCHEMA_REGISTRY_URL
-          value: "http://schema-registry:8081"
+          value: "http://schema-reg:8081"

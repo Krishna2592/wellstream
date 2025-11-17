@@ -102,7 +102,7 @@ services:
       - streaming-network
   schema-registry:
     image: confluentinc/cp-schema-registry:7.4.0
-    container_name: schema-registry
+    container_name: schema-reg
     depends_on:
       - kafka
     ports:
@@ -110,7 +110,7 @@ services:
     networks:
       - streaming-network
     environment:
-      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_HOST_NAME: schema-reg
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:29092
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
 
@@ -119,7 +119,7 @@ services:
     container_name: ksqldb-server
     depends_on:
       - kafka
-      - schema-registry
+      - schema-reg
     ports:
       - "8088:8088"
     networks:
@@ -127,7 +127,7 @@ services:
     environment:
       KSQL_BOOTSTRAP_SERVERS: kafka:29092
       KSQL_LISTENERS: http://0.0.0.0:8088
-      KSQL_KSQL_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      KSQL_KSQL_SCHEMA_REGISTRY_URL: http://schema-reg:8081
       KSQL_KSQL_LOGGING_PROCESSING_STREAM_AUTO_CREATE: "true"
       KSQL_KSQL_LOGGING_PROCESSING_TOPIC_AUTO_CREATE: "true"
 

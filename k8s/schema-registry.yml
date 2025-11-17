@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: schema-registry
+  name: schema-reg
 spec:
   selector:
-    app: schema-registry
+    app: schema-reg
   ports:
     - port: 8081
       targetPort: 8081
@@ -12,23 +12,23 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: schema-registry
+  name: schema-reg
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: schema-registry
+      app: schema-reg
   template:
     metadata:
       labels:
-        app: schema-registry
+        app: schema-reg
     spec:
       initContainers:
       - name: wait-for-kafka
         image: busybox
         command: ['sh', '-c', 'until nc -z kafka-broker.default.svc.cluster.local 9092; do echo waiting for kafka; sleep 2; done;']
       containers:
-      - name: schema-registry
+      - name: schema-reg
         image: confluentinc/cp-schema-registry:7.4.0
         command: ["/bin/sh", "-c", "unset PORT && /etc/confluent/docker/run"]
         ports:
@@ -42,7 +42,7 @@ spec:
             cpu: "1"
         env:
         - name: SCHEMA_REGISTRY_HOST_NAME
-          value: "schema-registry.default.svc.cluster.local"
+          value: "schema-reg.default.svc.cluster.local"
         - name: SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS
           value: "PLAINTEXT://kafka-broker.default.svc.cluster.local:9092"
         - name: SCHEMA_REGISTRY_LISTENERS
