@@ -58,16 +58,21 @@ wellstream_2/
 ├── docs/
 │   ├── ARCHITECTURE.md          # System architecture & data flow
 │   └── observability.md         # Monitoring setup guide
+├── avro-schemas/                # Avro schemas for all topics (registered in Schema Registry)
+│   ├── well-data.avsc
+│   └── tank-data.avsc
 ├── k8s/
-│   ├── kafka.yml               # Kafka StatefulSet
-│   ├── zookeeper.yml           # Zookeeper StatefulSet
-│   ├── producer.yml            # Data producer deployment
-│   ├── spark-processor.yml     # Spark streaming job
-│   ├── redis-*.yml             # Redis cache
-│   └── monitoring/             # Prometheus & Grafana
+│   ├── kafka.yml                # Kafka StatefulSet
+│   ├── zookeeper.yml            # Zookeeper StatefulSet
+│   ├── producer.yml             # Data producer deployment
+│   ├── spark-processor.yml      # Spark streaming job
+│   ├── schema-registry.yml      # Schema Registry deployment/service
+│   ├── ksqldb.yml               # KSQLDB deployment/service
+│   ├── redis-*.yml              # Redis cache
+│   └── monitoring/              # Prometheus & Grafana
 ├── monitoring/
-│   ├── prometheus.yml          # Metrics scrape config
-│   └── grafana-dashboards/     # Pre-built dashboards
+│   ├── prometheus.yml           # Metrics scrape config
+│   └── grafana-dashboards/      # Pre-built dashboards
 ├── producer/
 │   ├── src/main/java/com/wellstream/streaming/
 │   │   └── FakeDataProducer.java
@@ -77,18 +82,12 @@ wellstream_2/
 │   │   └── RealTimeWellTankPipeline.java
 │   ├── conf/metrics.properties
 │   └── Dockerfile
-├── avro-schemas/          
-│   ├── well-data.avsc
-│   └── tank-data.avsc
-├── ksql-scripts/          
+├── ksql-scripts/                # KSQL scripts for stream/table creation
 │   ├── create-streams.sql
 │   └── create-tables.sql
-├── k8s/
-│   ├── schema-registry.yml  
-│   └── ksqldb.yml          
-├── docker-compose.yml          # Base stack
-├── docker-compose.monitoring.yml  # Monitoring add-on
-└── pom.xml                     # Parent POM
+├── docker-compose.yml           # Base stack
+├── docker-compose.monitoring.yml # Monitoring add-on
+└── pom.xml                      # Parent POM
 ```
 
 ## Architecture
@@ -293,28 +292,21 @@ STEP 4: Read Kafka Streams
          ↓
 
 STEP 5: Cast Binary → String
-    │
-    ├─ col("value").cast(DataTypes.StringType)
-    │
-    └─ Now: binary data → readable JSON strings
 
-         ↓
+    ├─ col("value") is Avro-encoded (binary)
+    └─ Data is ready for Avro deserialization
 
-STEP 6 (Before): Parse JSON + Create Temp Views
-    │
-    ├─ from_json(col("json_value"), wellSchema)
-    ├─ from_json(col("json_value"), tankSchema)
-    │
-    ├─ wellParsed.createOrReplaceTempView("well_data_temp")
-    └─ tankParsed.createOrReplaceTempView("tank_data_temp")
-    
-STEP 6(NOW): Parse Avro with Schema Registry + Create Temp Views
+       ↓
+
+  STEP 6: Parse Avro with Schema Registry + Create Temp Views
     │
     ├─ Use spark-avro and set "schema.registry.url" to connect to Schema Registry
     ├─ from_avro(col("value"), schema, options)  # Deserializes using registered Avro schemas
     │
     ├─ wellParsed.createOrReplaceTempView("well_data_temp")
     └─ tankParsed.createOrReplaceTempView("tank_data_temp")
+    │
+    └─ All schemas are managed centrally in Confluent Schema Registry for compatibility and evolution
 
          ↓
 
