@@ -76,12 +76,16 @@ wellstream_2/
 ├── producer/
 │   ├── src/main/java/com/wellstream/streaming/
 │   │   └── FakeDataProducer.java
+│   │   └── TankEvent.java
+│   │   └── WellEvent.java
 │   └── Dockerfile
+│   └── pom.xml
 ├── spark-processor/
 │   ├── src/main/java/com/wellstream/streaming/
 │   │   └── RealTimeWellTankPipeline.java
 │   ├── conf/metrics.properties
 │   └── Dockerfile
+│   └── pom.xml
 ├── ksql-scripts/                # KSQL scripts for stream/table creation
 │   ├── create-streams.sql
 │   └── create-tables.sql
