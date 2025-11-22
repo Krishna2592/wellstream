@@ -1,6 +1,5 @@
 .github
 .vscode
-Java
 .env
 # Maven build output
 target/
