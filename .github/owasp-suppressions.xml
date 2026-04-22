@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    <!--
+        Suppressions for known CVEs that are acceptable in this deployment context.
+
+        Format:
+          <suppress>
+            <notes>Reason this CVE is accepted — link to internal review if available.</notes>
+            <cve>CVE-YYYY-NNNNN</cve>
+          </suppress>
+
+        Policy: any CVSS >= 9.0 suppressed here must be reviewed and re-approved
+        quarterly. Log review date in the <notes> element.
+    -->
+</suppressions>
