@@ -24,8 +24,13 @@
         <springdoc.version>2.4.0</springdoc.version>
     </properties>
 
-    <!-- Spring Milestone repo required for Spring AI artifacts -->
     <repositories>
+        <repository>
+            <id>spring-releases</id>
+            <name>Spring Releases</name>
+            <url>https://repo.spring.io/release</url>
+            <snapshots><enabled>false</enabled></snapshots>
+        </repository>
         <repository>
             <id>spring-milestones</id>
             <name>Spring Milestones</name>
