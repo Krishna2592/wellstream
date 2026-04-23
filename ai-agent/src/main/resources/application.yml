@@ -1,0 +1,26 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: wellstream-ai-agent
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+
+logging:
+  level:
+    com.wellstream.agent: INFO

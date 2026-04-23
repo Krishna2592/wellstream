@@ -1,0 +1,27 @@
+# =====================================================================
+# Spring AI profile — activated by SPRING_PROFILES_ACTIVE=ai
+# Requires: Ollama running with phi3:mini, mistral, nomic-embed-text
+#           Qdrant running on port 6333
+# Run: docker compose -f docker-compose.ai.yml up -d
+#      ./setup-ai.sh
+# =====================================================================
+
+spring:
+  ai:
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        # Default model — overridden per-agent call via OllamaOptions
+        model: phi3:mini
+        options:
+          temperature: 0.1
+          num-predict: 512
+      embedding:
+        # nomic-embed-text: 768-dimension embeddings, ~274MB, runs on CPU
+        model: nomic-embed-text
+    vectorstore:
+      qdrant:
+        host: ${QDRANT_HOST:localhost}
+        port: ${QDRANT_PORT:6333}
+        collection-name: wellstream-incidents
+        initialize-schema: true

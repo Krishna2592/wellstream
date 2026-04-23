@@ -30,6 +30,7 @@
     <modules>
         <module>producer</module>
         <module>spark-processor</module>
+        <module>ai-agent</module>
     </modules>
 
     <dependencyManagement>

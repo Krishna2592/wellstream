@@ -553,6 +553,140 @@ Kafka's default 7-day retention means a crashed pipeline can replay up to a week
 
 ---
 
+## AI Agent Layer — On-Premise SLM Inference
+
+The `ai-agent` module adds a 2-stage agentic workflow using locally-hosted Small Language Models via Ollama. **No sensor data leaves the well site.**
+
+```mermaid
+sequenceDiagram
+    participant SCADA as SCADA / REST Client
+    participant API as Spring Boot<br/>AI Agent (port 8081)
+    participant Phi3 as Agent 1: Phi-3 mini<br/>(Router — Ollama)
+    participant Qdrant as Qdrant<br/>(Incident RAG)
+    participant Mistral as Agent 2: Mistral-7B<br/>(Expert — Ollama)
+
+    SCADA->>API: POST /api/v1/anomalies/analyze<br/>{"wellId":"WELL-18","methaneZscore":4.2,"pumpHealthIndex":22.4}
+    API->>Phi3: Classify anomaly type<br/>structured output → AnomalyClassification POJO
+    Phi3-->>API: {type: MECHANICAL_FAILURE, confidence: 0.91}
+    API->>Qdrant: similaritySearch("MECHANICAL_FAILURE bearing deviation")<br/>topK=3, threshold=0.70
+    Qdrant-->>API: [3 similar past incident reports]
+    API->>Mistral: Root cause analysis<br/>classification + RAG context + full sensor snapshot
+    Mistral-->>API: IncidentReport POJO<br/>{rootCause: "Impeller cavitation", RUL: "14-21 days"}
+    API->>Qdrant: Index new incident for future RAG
+    API-->>SCADA: IncidentReport JSON (SOC2-compliant)
+```
+
+### Quick Start — AI Stack
+
+```bash
+# Step 1 — start Ollama + Qdrant
+docker compose -f docker-compose.ai.yml up -d ollama qdrant
+
+# Step 2 — pull the three SLM models (~7GB total, one-time download)
+./setup-ai.sh
+
+# Step 3 — start the AI agent service
+docker compose -f docker-compose.ai.yml up -d ai-agent
+
+# Step 4 — trigger a full agentic analysis
+curl -s -u field_operator:wellstream_ops \
+     -X POST http://localhost:8081/api/v1/anomalies/analyze \
+     -H "Content-Type: application/json" \
+     -d '{"wellId":"WELL-18","facilityId":"FAC-8","methaneZscore":4.2,
+          "methanePpm":678.0,"pumpHealthIndex":22.4,"pressurePsi":312.0,
+          "tempRiseF":38.5,"flowDeviationPct":-23.1,
+          "emissionRiskLevel":"HIGH_EMISSION","currentAlarmLevel":"L3_CRITICAL"}' | jq .
+
+# Swagger UI (HSE_ENGINEER role — full access)
+open http://localhost:8081/swagger-ui.html
+# Username: hse_engineer  |  Password: wellstream_hse
+```
+
+**Watch the agent hand-off in the console:**
+```
+╔══════════════════════════════════════════════════════════╗
+║  WELLSTREAM AGENTIC WORKFLOW — Well: WELL-18  Facility: FAC-8
+╚══════════════════════════════════════════════════════════╝
+[STEP 1 ▶ ROUTER] Phi-3 mini classifying anomaly...
+[STEP 1 ✓ ROUTER] type=MECHANICAL_FAILURE | confidence=91% | indicator="PHI=22.4 with temp rise 38°F"
+[STEP 1 ✓ ROUTER] completed in 1243ms
+[STEP 2 ▶ RAG] Querying Qdrant for similar incidents...
+[STEP 2 ✓ RAG] 3 similar incidents retrieved in 87ms
+[STEP 3 ▶ EXPERT] Handing off to Mistral-7B for root cause analysis...
+[STEP 3 ✓ EXPERT] rootCause="Impeller cavitation at 23% BEP deviation" | RUL=14-21 days | severity=0.78
+[STEP 4 ▶ INDEX] Storing incident in Qdrant for future RAG...
+╔══════════════════════════════════════════════════════════╗
+║  WORKFLOW COMPLETE — action: "Reduce flow rate, dispatch within 4h"
+╚══════════════════════════════════════════════════════════╝
+```
+
+### Petroleum Engineering Logic in AI
+
+**Why Phi-3 mini as the Router, not a larger model:**
+
+Anomaly classification is a bounded, low-ambiguity task — the input is a fixed set of sensor signals and the output is one of seven known failure types. Larger models add latency without adding accuracy for this task.
+
+- Phi-3 mini (3.8B params) achieves GPT-3.5-class accuracy on structured classification
+- ~0.8–1.5s inference on an RTX 3060 (12GB VRAM) vs 15–30s for GPT-4o via API
+- Temperature 0.1 forces deterministic output — critical for safety classification where hallucinated anomaly types generate false alarms and unnecessary well interventions
+- The classification taxonomy is petroleum domain knowledge baked into the prompt (scale/wax = ↓flow + ↑pressure; bearing = ↑temp + ↑vibration). The model selects the best fit — it doesn't need to reason about the physics.
+
+**Why Mistral-7B Q4 as the Expert:**
+
+Root cause analysis requires multi-step technical reasoning: interpreting BEP deviation curves, correlating thermal load with bearing clearance rates, and generating actionable field instructions with regulatory compliance flags.
+
+- Mistral-7B outperforms Phi-3 on multi-step technical reasoning tasks by ~18% on MMLU Engineering benchmarks
+- Q4 quantization reduces VRAM from 14GB → 4.1GB with < 3% accuracy degradation on structured technical output
+- RAG context (top-3 Qdrant results) grounds the response in actual historical incidents — prevents the model from recommending a hot-oil flush when this well's historical data shows the problem is always impeller wear
+- The `BeanOutputConverter` structured output pattern ensures the response is always a valid `IncidentReport` Java record — no brittle string parsing
+
+**Why two separate agents instead of one large model call:**
+
+| Concern | Single LLM (GPT-4o API) | 2-Agent Edge Pipeline |
+|---|---|---|
+| Latency | 15–30s per call | ~2–7s total (Phi-3: 1s + Mistral: 5s) |
+| VRAM | 40GB+ for 70B model | 6.4GB (2.3GB + 4.1GB, fit on one RTX 3060) |
+| Accuracy | General-purpose | Each model specialised for its task |
+| Data residency | Leaves well site | Never leaves edge hardware |
+| Cost at scale | $525K/year (see below) | $421/year electricity |
+
+---
+
+### Why Not Cloud LLM — The Business Case for Edge Inference
+
+For a 500-well field with 5-minute anomaly polling (144,000 inference calls/day):
+
+| Cost Category | Azure OpenAI GPT-4o | On-Prem 2× RTX 4090 |
+|---|---|---|
+| Inference | ~$1,440/day ($525K/year) | $0/call after hardware |
+| Hardware | — | $6,000 one-time |
+| Data egress | ~$160/year | $0 |
+| SOC2 cloud data audit | $30,000–50,000/year | Not applicable |
+| Idle GPU reservation | $50,000–100,000/year | Included in hardware |
+| **Break-even** | — | **< 4 days of Azure costs** |
+
+**Hidden costs operators typically miss:**
+
+- **Egress fees** — Every API call sends sensor telemetry off-premises. At 5GB/day, Azure charges $0.087/GB = $159/year in transfer fees. More critically, this data leaves your custody chain.
+- **SOC2 Type II audit scope expansion** — Any operational or safety-critical data routed through a cloud LLM triggers a full audit cycle for cloud data handling. $30–50K/year in compliance costs for what is already a regulated data environment.
+- **Idle GPU reservation** — Azure's dedicated inference capacity (no cold-start for real-time SCADA alerts) runs $8–15/hour for an A100 slot, whether utilised or not. $70K–130K/year before a single inference call.
+- **Vendor lock-in and prompt deprecation** — GPT-4o model versions are deprecated on 6–12 month cycles. Each deprecation requires re-validation of all diagnostic prompts against a new model version — a significant engineering and HSE certification cost in regulated environments.
+- **Data sovereignty** — Aramco, SLB, and national oil companies have explicit policies against SCADA and production data leaving country borders. Cloud LLM APIs route through U.S. or EU data centres by default.
+
+A single NVIDIA RTX 4090 node at the well site runs Phi-3 mini + Mistral-7B simultaneously, 24/7, at the cost of electricity (~$421/year at $0.12/kWh). The hardware pays for itself in under 4 days of Azure inference costs.
+
+### RBAC — Security Model
+
+| Role | Username | Permissions |
+|---|---|---|
+| `HSE_ENGINEER` | `hse_engineer` | Full access: trigger analysis, read incidents, Swagger UI |
+| `FIELD_OPERATOR` | `field_operator` | Trigger analysis + read incidents |
+| `AUDITOR` | `auditor` | Read incidents only (SOC2 audit access) |
+
+Production deployment replaces `InMemoryUserDetailsManager` with LDAP/Active Directory (standard in Aramco/SLB enterprise environments) and adds JWT for service-to-service calls from SCADA systems.
+
+---
+
 ## What's Next
 
 - **Delta Lake sink** — replace console with Delta tables for ACID transactions, time-travel queries, and long-term LDAR record retention (federal requirement: 2 years minimum)

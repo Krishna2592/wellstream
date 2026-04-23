@@ -1,0 +1,85 @@
+# =====================================================================
+# WellStream AI Stack — On-Premise SLM Inference
+#
+# Runs independently of the main docker-compose.yml.
+# Start with:
+#   docker compose -f docker-compose.ai.yml up -d
+#   ./setup-ai.sh          ← pulls SLM models into Ollama (~7GB total)
+#
+# GPU passthrough (optional — Ollama falls back to CPU if no GPU found):
+#   Requires nvidia-container-toolkit on the host.
+#   See: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+#
+# Ports:
+#   8081  — WellStream AI Agent REST API + Swagger UI
+#   11434 — Ollama inference server
+#   6333  — Qdrant REST API
+#   6334  — Qdrant gRPC API
+# =====================================================================
+
+services:
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: wellstream-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Remove the deploy block if you don't have an NVIDIA GPU:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    networks:
+      - ai-network
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.9.0
+    container_name: wellstream-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - ai-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ai-agent:
+    build:
+      context: ./ai-agent
+      dockerfile: Dockerfile
+    container_name: wellstream-ai-agent
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: ai
+      OLLAMA_BASE_URL: http://ollama:11434
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+    ports:
+      - "8081:8081"
+    networks:
+      - ai-network
+    restart: on-failure
+
+volumes:
+  ollama_data:
+  qdrant_data:
+
+networks:
+  ai-network:
+    driver: bridge
