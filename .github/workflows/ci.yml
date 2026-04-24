@@ -22,7 +22,7 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Configure Maven settings (Confluent + Spring repos)
+      - name: Configure Maven settings (Confluent repo)
         run: |
           mkdir -p ~/.m2
           cat > ~/.m2/settings.xml <<'EOF'
@@ -34,16 +34,6 @@ jobs:
                   <repository>
                     <id>confluent</id>
                     <url>https://packages.confluent.io/maven/</url>
-                  </repository>
-                  <repository>
-                    <id>spring-releases</id>
-                    <url>https://repo.spring.io/release</url>
-                    <snapshots><enabled>false</enabled></snapshots>
-                  </repository>
-                  <repository>
-                    <id>spring-milestones</id>
-                    <url>https://repo.spring.io/milestone</url>
-                    <snapshots><enabled>false</enabled></snapshots>
                   </repository>
                 </repositories>
               </profile>
